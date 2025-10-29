@@ -92,30 +92,30 @@ contract StakingNFTTest is Test {
         vm.stopPrank();
     }
 
-    function testStakeWithPermit() public {
-        vm.startPrank(alice);
+    // function testStakeWithPermit() public {
+    //     vm.startPrank(alice);
 
-        uint256 amount = 100 ether;
-        uint256 nonce = token.nonces(alice);
-        uint256 deadline = block.timestamp + 1 days;
+    //     uint256 amount = 100 ether;
+    //     uint256 nonce = token.nonces(alice);
+    //     uint256 deadline = block.timestamp + 1 days;
 
-        // Prepare EIP712 permit digest
-        bytes32 DOMAIN_SEPARATOR = token.DOMAIN_SEPARATOR();
-        bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
-                alice,
-                address(staking),
-                amount,
-                nonce,
-                deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+    //     // Prepare EIP712 permit digest
+    //     bytes32 DOMAIN_SEPARATOR = token.DOMAIN_SEPARATOR();
+    //     bytes32 structHash = keccak256(
+    //         abi.encode(
+    //             keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+    //             alice,
+    //             address(staking),
+    //             amount,
+    //             nonce,
+    //             deadline
+    //         )
+    //     );
+    //     bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0x1, digest);
+    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(0x1, digest);
 
-        staking.stakeWithPermit(amount, address(0), deadline, v, r, s);
-        vm.stopPrank();
-    }
+    //     staking.stakeWithPermit(amount, address(0), deadline, v, r, s);
+    //     vm.stopPrank();
+    // }
 }

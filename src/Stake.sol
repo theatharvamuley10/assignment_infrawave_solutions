@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-/// @title StakingNFT - stake represented as ERC721 position NFTs
+/// @title StakingNFT - every stake is represented as ERC721 position NFTs
 /// @author atharva
 /// @notice Each stake mints an NFT. Only the current NFT owner can claim ROI or unstake
 /// @dev Uses SafeERC20 for token transfers. Referal (0.5%) paid imediately from deposited amount.
@@ -29,7 +29,6 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     error InvalidParameter();
     error ClaimIntervalNotMet();
     error InvalidBeneficiary();
-    error DailyROITooHigh();
     error ReferralRateTooHigh();
 
     /*//////////////////////////////////////////////////////////////
@@ -66,9 +65,6 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     //////////////////////////////////////////////////////////////*/
     // daily roi denominator
     uint256 public constant DEN = 10_000;
-
-    // Maximum daily ROI: 5% (500/10000)
-    uint256 public constant MAX_DAILY_ROI = 500;
 
     // Maximum referal rate: 10% (1000/10000)
     uint256 public constant MAX_REFERRAL_RATE = 1000;
@@ -305,6 +301,8 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         if (referrer == address(0)) {
             netStake = amount;
+        } else if (referrer == msg.sender) {
+            revert InvalidReferrer();
         } else {
             referrerReward = (amount * REFERRAL) / DEN;
             netStake = amount - referrerReward;
@@ -328,7 +326,7 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
         _mint(staker, stakeId);
 
         // Pay referrer if applicable
-        if (referrer != address(0)) {
+        if (referrer != address(0) && referrer != msg.sender) {
             stakingToken.safeTransfer(referrer, referrerReward);
             emit ReferralPaid(referrer, stakeId, referrerReward);
         }
@@ -342,7 +340,6 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
                           ADMIN ONLY FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     function setDailyROI(uint256 newDailyROI) external onlyOwner {
-        if (newDailyROI > MAX_DAILY_ROI) revert DailyROITooHigh();
         DAILY = newDailyROI;
         emit DailyROIUpdated(newDailyROI);
     }
