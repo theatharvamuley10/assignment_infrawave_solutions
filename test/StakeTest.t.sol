@@ -3,11 +3,11 @@ pragma solidity 0.8.20;
 
 import "forge-std/Test.sol";
 import {StakingNFT} from "../src/Stake.sol";
-import {MockERC20Permit} from "../src/mockBEP20.sol";
+import {MockBEP20Permit} from "../src/mockBEP20.sol";
 
 contract StakingNFTTest is Test {
     StakingNFT public staking;
-    MockERC20Permit public token;
+    MockBEP20Permit public token;
 
     address alice = address(0x1);
     address bob = address(0x2);
@@ -15,7 +15,7 @@ contract StakingNFTTest is Test {
 
     function setUp() public {
         // Deploy token and mint to alice and bob
-        token = new MockERC20Permit();
+        token = new MockBEP20Permit();
         token.mint(alice, 1_000 ether); // here 1_000 ether = 1_000 * 1e18
         token.mint(bob, 1_000 ether);
 
