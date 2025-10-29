@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 /// @title StakingNFT - stake represented as ERC721 position NFTs
-/// @author ...
+/// @author atharva
 /// @notice Each stake mints an NFT. Only the current NFT owner can claim ROI or unstake
 /// @dev Uses SafeERC20 for token transfers. Referal (0.5%) paid imediately from deposited amount.
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
