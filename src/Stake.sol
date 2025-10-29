@@ -84,8 +84,12 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/
-    modifier onlyStakeOwner(uint256 stakeId) {
-        if (ownerOf(stakeId) != msg.sender) revert NotStakeOwner();
+    // make sure the claimer / unstaker is either the owner of the stake or approved for it
+    modifier onlyStakeOwnerOrApproved(uint256 stakeId) {
+        if (
+            ownerOf(stakeId) != msg.sender && msg.sender != getApproved(stakeId)
+                && !isApprovedForAll(ownerOf(stakeId), msg.sender)
+        ) revert NotStakeOwner();
         _;
     }
 
@@ -126,6 +130,79 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
             return _createStakeWithReferrer(msg.sender, referrer, amount, nextStakeId, uint40(block.timestamp));
         }
     }
+
+    /// @notice Claim daily ROI rewards for a given stake NFT
+    /// @param stakeId The tokenId of the stake (also stakeId)
+    function claim(uint256 stakeId, address beneficiary)
+        external
+        nonReentrant
+        whenNotPaused
+        onlyStakeOwnerOrApproved(stakeId)
+        stakeExists(stakeId)
+    {
+        Stake memory userStake = stakeIdToStakeData[stakeId];
+        uint40 lastClaim = userStake.last_claim_timestamp;
+
+        // calculate full days passed
+        uint256 daysPassed = (block.timestamp - lastClaim) / 1 days;
+        if (daysPassed == 0) revert NoRewardsAvailable();
+
+        // calculate reward = principal * DAILY% * daysPassed
+        uint256 reward = (userStake.amount_staked * DAILY * daysPassed) / DEN;
+
+        // sanity check: contract must have enough tokens to pay reward and still have enough tokens to return all the stakes
+        uint256 bal = stakingToken.balanceOf(address(this));
+        if (bal < totalStaked + reward) revert InsufficientContractBalance();
+
+        // update state
+        stakeIdToStakeData[stakeId].last_claim_timestamp = lastClaim + uint40(daysPassed * 1 days);
+
+        // transfer reward
+        stakingToken.safeTransfer(beneficiary, reward);
+
+        emit Claimed(msg.sender, stakeId, reward, block.timestamp);
+    }
+
+    /// @notice Unstake principal and any pending rewards for a given stake NFT
+    /// @param stakeId The NFT tokenId representing the stake position
+    /// @param beneficiary The address that will receive the unstaked principal + rewards
+    function unstake(uint256 stakeId, address beneficiary)
+        external
+        nonReentrant
+        whenNotPaused
+        onlyStakeOwnerOrApproved(stakeId)
+        stakeExists(stakeId)
+    {
+        if (beneficiary == address(0)) revert InvalidReferrer(); // reuse or create InvalidBeneficiary()
+
+        Stake memory userStake = stakeIdToStakeData[stakeId];
+        uint40 lastClaim = userStake.last_claim_timestamp;
+        uint256 principal = userStake.amount_staked;
+
+        if (principal == 0) revert CannotUnstakeZero();
+
+        // calculate any pending rewards
+        uint256 daysPassed = (block.timestamp - lastClaim) / 1 days;
+        uint256 reward = (principal * DAILY * daysPassed) / DEN;
+
+        // check contract liquidity (must cover all staked + reward)
+        uint256 bal = stakingToken.balanceOf(address(this));
+        if (bal < totalStaked + reward) revert InsufficientContractBalance();
+
+        // update global + local state
+        totalStaked -= principal;
+        delete stakeIdToStakeData[stakeId]; // delete struct from storage
+        _burn(stakeId); // burn NFT so ownership of stake is gone
+
+        // transfer principal + rewards
+        stakingToken.safeTransfer(beneficiary, principal + reward);
+
+        emit Unstaked(msg.sender, stakeId, principal, reward, beneficiary);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     function _createStakeWithoutReferrer(
         address staker,
@@ -168,9 +245,6 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
         uint256 referrerReward = (amountStaked * REFERRAL) / DEN;
         uint256 netStake = amountStaked - referrerReward;
 
-        // transfer full amount to contract
-        stakingToken.transferFrom(staker, address(this), amountStaked);
-
         Stake memory newStake = Stake({
             staker: staker,
             referrer: referrer,
@@ -179,13 +253,16 @@ contract StakingNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
             last_claim_timestamp: timestamp
         });
 
+        // transfer full amount to contract
+        stakingToken.transferFrom(staker, address(this), amountStaked);
+
         stakeIdToStakeData[stakeId] = newStake;
         totalStaked += netStake;
         nextStakeId += 1;
 
         _mint(staker, stakeId);
         // reward referrer
-        stakingToken.safeTransferFrom(address(this), referrer, referrerReward);
+        stakingToken.safeTransfer(referrer, referrerReward);
 
         emit StakeCreated(
             newStake.staker, newStake.referrer, newStake.amount_staked, newStake.stakeId, newStake.last_claim_timestamp
